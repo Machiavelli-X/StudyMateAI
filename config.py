@@ -28,15 +28,11 @@ TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 TAVILY_MAX_RESULTS = int(os.getenv("TAVILY_MAX_RESULTS", "4"))
 
 # ==========================================================
-# Models
+# Model
 # ==========================================================
-# Fast generation model for Summary and Quiz (e.g. Apodex or Groq)
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-APODEX_MODEL = os.getenv("APODEX_MODEL", os.getenv("OPENROUTER_MODEL", "apodex/apodex-1.1-mini:free"))
-
-# Reasoning / Reflection model (e.g. Nemotron or OpenRouter)
-NEMOTRON_MODEL = os.getenv("NEMOTRON_MODEL", "nvidia/nemotron-3.5-lightning:free")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3.5-lightning:free")
+# The single LLM used for every feature.
+# Backward-compatible: also reads the old NEMOTRON_MODEL name.
+LLM_MODEL = os.getenv("LLM_MODEL") or os.getenv("NEMOTRON_MODEL") or "nvidia/nemotron-3-super-120b-a12b:free"
 
 # ==========================================================
 # ChromaDB
