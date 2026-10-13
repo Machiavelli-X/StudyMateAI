@@ -23,6 +23,10 @@ APODEX_API_KEY = os.getenv("APODEX_API_KEY")
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 APODEX_BASE_URL = os.getenv("APODEX_BASE_URL", "https://api.apodex.ai/v1")
 
+# Web search / agentic validation
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+TAVILY_MAX_RESULTS = int(os.getenv("TAVILY_MAX_RESULTS", "4"))
+
 # ==========================================================
 # Models
 # ==========================================================
