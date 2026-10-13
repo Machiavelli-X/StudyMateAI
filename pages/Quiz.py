@@ -2,28 +2,30 @@ import streamlit as st
 from services.quiz_service import QuizService
 from components.styles import load_css
 
-st.set_page_config(page_title="Quiz Generator", page_icon="📝", layout="wide")
+st.set_page_config(page_title="AI Quiz Generator", page_icon="📝", layout="wide")
 load_css()
 
 service = QuizService()
 
-st.title("AI Quiz Generator")
-
-defaults = {
+# ---- session state ----
+_defaults = {
     "quiz": None,
     "current_question": 0,
     "score": 0,
     "answers": {},
+    "quiz_submitted": False,
     "current_quiz_review": None,
     "review_error": None,
-    "quiz_submitted": False
+    "difficulty": "Medium",
+    "question_type": "Multiple Choice",
+    "num_questions": 5,
 }
-
-for k, v in defaults.items():
+for k, v in _defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-latest_quiz_defaults = {
+# Latest quiz result (shared with the Reflection page)
+_latest_defaults = {
     "quiz_completed": False,
     "quiz_score": None,
     "quiz_total": None,
@@ -33,16 +35,14 @@ latest_quiz_defaults = {
     "quiz_status": None,
     "quiz_review": None,
     "quiz_overall_performance_summary": None,
-    "quiz_agent_message": None
+    "quiz_agent_message": None,
 }
-
-for k, v in latest_quiz_defaults.items():
+for k, v in _latest_defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
 
 def _store_latest_quiz(score_result, review=None):
-    """Keep only the most recently completed quiz for Reflection."""
     st.session_state.quiz_completed = True
     st.session_state.quiz_score = score_result["score"]
     st.session_state.quiz_total = score_result["total"]
@@ -55,170 +55,172 @@ def _store_latest_quiz(score_result, review=None):
         review.get("overall_learning_report", {}).get("overall_performance")
         if review else None
     )
-    st.session_state.quiz_agent_message = service.create_reflection_message(
-        score_result, review
-    )
+    st.session_state.quiz_agent_message = service.create_reflection_message(score_result, review)
 
-with st.sidebar:
-    provider = "auto"
-    difficulty = st.selectbox("Difficulty", ["Easy","Medium","Hard"])
-    question_type = st.selectbox("Question Type", ["MCQ","True / False","Mixed"])
-    num_questions = st.slider("Number of Questions",5,20,5,step=5)
 
-    if st.button("Generate Quiz", use_container_width=True):
-        result = service.generate_quiz(
-            provider=provider,
-            difficulty=difficulty,
-            question_type=question_type,
-            num_questions=num_questions
-        )
+def _do_submit(quiz):
+    score_result = service.calculate_score(quiz, st.session_state.answers)
+    st.session_state.score = score_result["score"]
+    review_result = service.review_quiz(quiz, st.session_state.answers, provider="auto")
+    if review_result["success"]:
+        st.session_state.current_quiz_review = review_result["review"]
+        st.session_state.review_error = None
+        _store_latest_quiz(score_result, review_result["review"])
+    else:
+        st.session_state.current_quiz_review = None
+        st.session_state.review_error = review_result["message"]
+        _store_latest_quiz(score_result)
+    st.session_state.quiz_submitted = True
+    st.session_state.current_question = len(quiz)
+    st.rerun()
 
-        if result["success"]:
-            st.session_state.quiz = result["quiz"]
-            st.session_state.current_question = 0
-            st.session_state.score = 0
-            st.session_state.answers = {}
-            st.session_state.current_quiz_review = None
-            st.session_state.review_error = None
-            st.session_state.quiz_submitted = False
-            st.rerun()
-        else:
-            st.error(result["message"])
 
-if not st.session_state.quiz:
-    st.info("Generate a quiz using the sidebar.")
-    st.stop()
+st.title("AI Quiz Generator")
+st.caption("Test yourself with a quiz generated from your uploaded notes.")
 
 quiz = st.session_state.quiz
+
+# ==================== SETUP ====================
+if quiz is None:
+    with st.container(border=True):
+        st.markdown("### Quiz Settings")
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            difficulty = st.selectbox(
+                "Difficulty", ["Easy", "Medium", "Hard"], key="difficulty"
+            )
+        with c2:
+            question_type = st.selectbox(
+                "Question Type", ["Multiple Choice", "True / False"], key="question_type"
+            )
+        with c3:
+            num_questions = st.slider(
+                "Number of Questions", 5, 20, step=5, key="num_questions"
+            )
+
+        if st.button("Generate Quiz", type="primary", use_container_width=True):
+            with st.spinner("Generating your quiz..."):
+                result = service.generate_quiz(
+                    difficulty=difficulty,
+                    question_type=question_type,
+                    num_questions=num_questions,
+                )
+            if result["success"]:
+                st.session_state.quiz = result["quiz"]
+                st.session_state.current_question = 0
+                st.session_state.score = 0
+                st.session_state.answers = {}
+                st.session_state.quiz_submitted = False
+                st.session_state.current_quiz_review = None
+                st.session_state.review_error = None
+                st.rerun()
+            else:
+                st.error(result["message"])
+    st.stop()
+
 total = len(quiz)
 index = st.session_state.current_question
 
+# ==================== COMPLETED ====================
 if index >= total:
-    st.header("Quiz Completed")
-    st.metric("Score", f"{st.session_state.score}/{total}")
     percentage = (st.session_state.score / total) * 100 if total else 0
-    st.metric("Percentage", f"{percentage:.0f}%")
-    st.write(f"**Status:** {'PASS' if percentage >= 50 else 'FAIL'}")
+    status = "PASS" if percentage >= 50 else "FAIL"
 
-    if st.session_state.current_quiz_review:
-        review = st.session_state.current_quiz_review
-        st.subheader("Quiz Review")
+    st.markdown(f"## {'🎉' if status == 'PASS' else '📚'} Quiz Complete")
 
-        for item in review["questions"]:
-            is_correct = item["status"].strip().lower() == "correct"
-            label = "✅ Correct" if is_correct else "❌ Incorrect"
-            with st.expander(f"Question {item['question_number']} — {label}"):
-                if is_correct:
-                    st.success(f"Status: {label}")
-                else:
-                    st.error(f"Status: {label}")
-                st.write(f"**Your Answer:** {item['your_answer']}")
-                st.write(f"**Correct Answer:** {item['correct_answer']}")
-                st.write(f"**Explanation:** {item['explanation']}")
-
-        report = review["overall_learning_report"]
-        st.subheader("Overall Learning Report")
-        for title, key in [
-            ("Overall Performance", "overall_performance"),
-            ("Strengths", "strengths"),
-            ("Weak Areas", "weak_areas"),
-            ("Topics To Revise", "topics_to_revise"),
-            ("Study Recommendations", "study_recommendations"),
-            ("Motivational Feedback", "motivational_feedback"),
-            ("Estimated Readiness Level", "estimated_readiness_level")
-        ]:
-            st.write(f"**{title}:** {report[key]}")
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Score", f"{st.session_state.score} / {total}")
+    m2.metric("Percentage", f"{percentage:.0f}%")
+    m3.metric("Status", status)
 
     if st.session_state.review_error:
         st.error(st.session_state.review_error)
 
-    if not st.session_state.quiz_submitted:
-        if st.button("Submit Quiz", use_container_width=True):
-            score_result = service.calculate_score(quiz, st.session_state.answers)
-            st.session_state.score = score_result["score"]
-            result = service.review_quiz(
-                quiz,
-                st.session_state.answers,
-                provider=provider
-            )
-            if result["success"]:
-                st.session_state.current_quiz_review = result["review"]
-                st.session_state.review_error = None
-                st.session_state.quiz_submitted = True
-                _store_latest_quiz(score_result, result["review"])
-            else:
-                st.session_state.review_error = result["message"]
-                _store_latest_quiz(score_result)
-            st.rerun()
+    review = st.session_state.current_quiz_review
+    if review:
+        st.markdown("---")
+        st.markdown("### Review")
+        for item in review.get("questions", []):
+            correct = item.get("status", "").strip().lower() == "correct"
+            label = "✅ Correct" if correct else "❌ Incorrect"
+            with st.expander(f"Question {item.get('question_number', '?')} — {label}"):
+                st.markdown(f"**Your answer:** {item.get('your_answer', '')}")
+                st.markdown(f"**Correct answer:** {item.get('correct_answer', '')}")
+                st.markdown(f"**Explanation:** {item.get('explanation', '')}")
 
-    if st.button("Generate New Quiz"):
-        for k, v in defaults.items():
-            st.session_state[k] = v
+        report = review.get("overall_learning_report", {})
+        if report:
+            st.markdown("### Learning Report")
+            for title, key in [
+                ("Overall Performance", "overall_performance"),
+                ("Strengths", "strengths"),
+                ("Weak Areas", "weak_areas"),
+                ("Topics to Revise", "topics_to_revise"),
+                ("Study Recommendations", "study_recommendations"),
+                ("Motivation", "motivational_feedback"),
+                ("Readiness Level", "estimated_readiness_level"),
+            ]:
+                if key in report:
+                    st.markdown(f"**{title}:** {report[key]}")
+
+    st.markdown("---")
+    if st.button("Generate New Quiz", type="primary", use_container_width=True):
+        st.session_state.quiz = None
+        st.session_state.current_question = 0
+        st.session_state.score = 0
+        st.session_state.answers = {}
+        st.session_state.quiz_submitted = False
+        st.session_state.current_quiz_review = None
+        st.session_state.review_error = None
         st.rerun()
-
     st.stop()
 
+# ==================== QUESTION ====================
 q = quiz[index]
+st.progress((index + 1) / total)
 
-st.progress((index+1)/total)
-st.subheader(f"Question {index+1} of {total}")
-st.write(q["question"])
+option_keys = list(q["options"].keys())
+option_labels = [f"{k}. {q['options'][k]}" for k in option_keys]
+label_to_key = dict(zip(option_labels, option_keys))
 
-options = [
-    f"A. {q['options']['A']}",
-    f"B. {q['options']['B']}",
-    f"C. {q['options']['C']}",
-    f"D. {q['options']['D']}",
-]
+saved = st.session_state.answers.get(index)
+saved_idx = option_keys.index(saved) if saved in option_keys else None
 
-# NEW - Remember previously selected answer
-saved_answer = st.session_state.answers.get(index)
+with st.container(border=True):
+    st.markdown(f"**Question {index + 1} of {total}**")
+    st.markdown(f"### {q['question']}")
+    selected = st.radio(
+        "Choose your answer",
+        option_labels,
+        index=saved_idx,
+        key=f"radio_{index}",
+        label_visibility="collapsed",
+    )
+    if selected:
+        st.session_state.answers[index] = label_to_key[selected]
 
-selected = st.radio(
-    "Choose your answer",
-    options,
-    index=["A","B","C","D"].index(saved_answer) if saved_answer else None,
-    key=f"radio_{index}"
-)
+answered = len(st.session_state.answers)
+st.caption(f"**{answered} / {total} answered**")
 
-# NEW - Save selected answer automatically
-if selected:
-    st.session_state.answers[index] = selected[0]
-
-c1, c2 = st.columns(2)
-
-with c1:
-    if st.button("Previous", disabled=index==0):
+# ---- navigation ----
+nav1, nav2 = st.columns(2)
+with nav1:
+    if st.button("← Previous", disabled=(index == 0), type="secondary", use_container_width=True):
         st.session_state.current_question -= 1
         st.rerun()
-
-with c2:
-    if index < total-1:
-        if st.button("Next"):
+with nav2:
+    if index < total - 1:
+        if st.button("Next →", type="primary", use_container_width=True):
             st.session_state.current_question += 1
             st.rerun()
-    else:
-        all_answered = len(st.session_state.answers) == total
 
-        if not all_answered:
-            st.caption("Answer every question before submitting the quiz.")
-
-        if st.button("Submit Quiz", disabled=not all_answered):
-            score_result = service.calculate_score(quiz, st.session_state.answers)
-            st.session_state.score = score_result["score"]
-            st.session_state.current_question = total
-            review_result = service.review_quiz(
-                quiz,
-                st.session_state.answers,
-                provider=provider
-            )
-            if review_result["success"]:
-                st.session_state.current_quiz_review = review_result["review"]
-                st.session_state.review_error = None
-                st.session_state.quiz_submitted = True
-                _store_latest_quiz(score_result, review_result["review"])
-            else:
-                st.session_state.current_quiz_review = None
-                st.session_state.review_error = review_result["message"]
-                _store_latest_quiz(score_result)
-            st.rerun()
+# ---- submit (full width, only on last question) ----
+if index == total - 1:
+    st.markdown("---")
+    all_answered = answered == total
+    if not all_answered:
+        st.warning(f"You've answered {answered} of {total} questions. Answer them all to submit.")
+    if st.button("Submit Quiz", type="primary", disabled=not all_answered, use_container_width=True):
+        with st.spinner("Reviewing your answers..."):
+            _do_submit(quiz)

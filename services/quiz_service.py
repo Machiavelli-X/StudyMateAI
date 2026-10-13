@@ -36,6 +36,32 @@ class QuizService:
 
             context = "\n\n".join(documents)
 
+            is_true_false = "true" in question_type.strip().lower()
+
+            if is_true_false:
+                options_rule = (
+                    "Every question MUST have exactly 2 options: A = True and B = False. "
+                    'The "answer" is "A" when the statement is true, "B" when it is false.'
+                )
+                format_hint = '''[
+  {
+    "question": "A statement that is either true or false",
+    "options": {"A": "True", "B": "False"},
+    "answer": "A",
+    "explanation": "Short explanation."
+  }
+]'''
+            else:
+                options_rule = "Every question MUST have exactly 4 options (A, B, C, D)."
+                format_hint = '''[
+  {
+    "question": "Question text",
+    "options": {"A": "Option A", "B": "Option B", "C": "Option C", "D": "Option D"},
+    "answer": "A",
+    "explanation": "Short explanation."
+  }
+]'''
+
             prompt = f"""
 You are StudyMate AI.
 
@@ -46,9 +72,9 @@ IMPORTANT RULES
 - Use ONLY the lecture notes.
 - Never invent information.
 - Generate exactly {num_questions} questions.
-- Difficulty: {difficulty}
+- Difficulty: {difficulty} (Easy = basic recall, Medium = understanding, Hard = application/analysis).
 - Question Type: {question_type}
-- Every question MUST have exactly 4 options.
+- {options_rule}
 - Only ONE correct answer.
 - Provide a short explanation.
 - Return ONLY valid JSON.
@@ -58,19 +84,7 @@ IMPORTANT RULES
 
 JSON FORMAT
 
-[
-  {{
-    "question": "Question text",
-    "options": {{
-      "A": "Option A",
-      "B": "Option B",
-      "C": "Option C",
-      "D": "Option D"
-    }},
-    "answer": "A",
-    "explanation": "Short explanation."
-  }}
-]
+{format_hint}
 
 LECTURE NOTES
 
@@ -112,10 +126,14 @@ LECTURE NOTES
 
             quiz = parsed
 
-            # Basic validation
             if not isinstance(quiz, list):
                 raise Exception("Quiz is not a valid list.")
 
+            # Enforce the requested number of questions
+            if len(quiz) > num_questions:
+                quiz = quiz[:num_questions]
+
+            # Validate structure (2 options for True/False, 4 for MCQ)
             for item in quiz:
 
                 if "question" not in item:
@@ -132,10 +150,11 @@ LECTURE NOTES
 
                 options = item["options"]
 
-                for key in ["A", "B", "C", "D"]:
+                if not isinstance(options, dict) or len(options) < 2:
+                    raise Exception("Invalid options format.")
 
-                    if key not in options:
-                        raise Exception(f"Missing option {key}")
+                if item["answer"] not in options:
+                    raise Exception("Answer is not one of the options.")
 
             return {
                 "success": True,

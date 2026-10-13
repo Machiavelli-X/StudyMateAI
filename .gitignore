@@ -5,3 +5,4 @@ __pycache__/
 data/uploads/*
 data/chroma_db/*
 .streamlit/secrets.toml
+studymate_interview_prep.md

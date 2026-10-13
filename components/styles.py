@@ -90,36 +90,47 @@ def load_css():
         ====================================== */
 
         .stButton>button{
-
             width:100%;
             height:46px;
-
             border-radius:10px;
-
             border:1px solid #2563EB;
-
             background:#2563EB;
-
-            color:white;
-
+            color:#FFFFFF;
             font-weight:600;
-
-            transition:all .25s ease;
-
+            transition:all .2s ease;
             cursor:pointer;
-
         }
 
-        .stButton>button:hover{
-
+        .stButton>button:hover:not(:disabled){
             background:#1D4ED8;
-
             border-color:#1D4ED8;
-
-            transform:translateY(-2px);
-
+            transform:translateY(-1px);
             box-shadow:0 8px 18px rgba(37,99,235,.25);
+        }
 
+        /* Disabled buttons: clearly inactive but still readable */
+        .stButton>button:disabled,
+        .stButton>button[disabled]{
+            background:#F3F4F6;
+            border-color:#E5E7EB;
+            color:#9CA3AF;
+            cursor:not-allowed;
+            transform:none;
+            box-shadow:none;
+        }
+
+        /* Secondary (outlined) buttons */
+        .stButton>button[kind="secondary"]{
+            background:#FFFFFF;
+            border:1px solid #2563EB;
+            color:#2563EB;
+        }
+        .stButton>button[kind="secondary"]:hover:not(:disabled){
+            background:#EFF6FF;
+            border-color:#2563EB;
+            color:#1D4ED8;
+            box-shadow:none;
+            transform:translateY(-1px);
         }
 
         /* ======================================

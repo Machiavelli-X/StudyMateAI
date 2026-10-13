@@ -2,11 +2,11 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
 from config import (
-    GROQ_API_KEY,
-    OPENROUTER_API_KEY,
-    APODEX_API_KEY,
+    LLM_API_KEY,
+    LLM_BASE_URL,
     LLM_MODEL,
-    OPENROUTER_BASE_URL,
+    GROQ_API_KEY,
+    APODEX_API_KEY,
     APODEX_BASE_URL,
 )
 
@@ -15,26 +15,29 @@ load_dotenv()
 
 class AIProvider:
     """
-    Returns a single LLM for every feature.
+    Returns a single LLM (any OpenAI-compatible endpoint).
 
-    Provider fallback order: OpenRouter -> Groq -> Apodex,
-    all using the one LLM_MODEL from config.
+    Primary provider: LLM_API_KEY + LLM_BASE_URL (e.g. OpenCode Zen, OpenRouter).
+    Optional fallbacks: Groq, Apodex.
     """
 
     def __init__(self):
-        self.groq_api_key = GROQ_API_KEY
-        self.openrouter_api_key = OPENROUTER_API_KEY
-        self.apodex_api_key = APODEX_API_KEY
+        self.api_key = LLM_API_KEY
+        self.base_url = LLM_BASE_URL
         self.model = LLM_MODEL
+        self.groq_api_key = GROQ_API_KEY
+        self.apodex_api_key = APODEX_API_KEY
 
-    def _get_openrouter(self):
+    def _get_llm(self):
         return ChatOpenAI(
             model=self.model,
-            api_key=self.openrouter_api_key,
-            base_url=OPENROUTER_BASE_URL,
+            api_key=self.api_key,
+            base_url=self.base_url,
             temperature=0.3,
             max_tokens=8192,
             request_timeout=60,
+            # OpenCode Zen "go" requires a stable session id per conversation.
+            default_headers={"x-opencode-session": "studymate-session"},
         )
 
     def _get_groq(self):
@@ -60,10 +63,8 @@ class AIProvider:
 
     def get_llm(self, provider="auto", task=None):
         """
-        Return the single LLM.
-
-        `task` is kept for backward compatibility but no longer changes the
-        model — every feature uses the same LLM_MODEL.
+        Return the single LLM. `task` is kept for backward compatibility
+        but no longer changes the model.
         """
         provider_lower = (provider or "auto").lower()
 
@@ -75,12 +76,9 @@ class AIProvider:
         if provider_lower == "apodex" and self.apodex_api_key:
             return self._get_apodex()
 
-        if provider_lower == "openrouter" and self.openrouter_api_key:
-            return self._get_openrouter()
-
-        # Default / auto: OpenRouter first, then Groq, then Apodex
-        if self.openrouter_api_key:
-            return self._get_openrouter()
+        # Default / auto: the primary LLM provider
+        if self.api_key:
+            return self._get_llm()
         if self.groq_api_key:
             llm = self._get_groq()
             if llm is not None:
@@ -88,12 +86,12 @@ class AIProvider:
         if self.apodex_api_key:
             return self._get_apodex()
 
-        raise ValueError("No API key found. Please add OPENROUTER_API_KEY to your .env file.")
+        raise ValueError("No API key found. Please add LLM_API_KEY (and LLM_BASE_URL) to your .env file.")
 
     def available_providers(self):
         providers = []
-        if self.openrouter_api_key:
-            providers.append("OpenRouter")
+        if self.api_key:
+            providers.append("LLM")
         if self.groq_api_key:
             providers.append("Groq")
         if self.apodex_api_key:

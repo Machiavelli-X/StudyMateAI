@@ -23,8 +23,12 @@ APODEX_API_KEY = os.getenv("APODEX_API_KEY")
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 APODEX_BASE_URL = os.getenv("APODEX_BASE_URL", "https://api.apodex.ai/v1")
 
+# Generic OpenAI-compatible LLM (OpenCode Zen, OpenRouter, DeepSeek, Google AI Studio, etc.)
+LLM_API_KEY = (os.getenv("LLM_API_KEY") or os.getenv("OPENROUTER_API_KEY") or "").strip() or None
+LLM_BASE_URL = (os.getenv("LLM_BASE_URL") or os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")).strip()
+
 # Web search / agentic validation
-TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+TAVILY_API_KEY = (os.getenv("TAVILY_API_KEY") or "").strip() or None
 TAVILY_MAX_RESULTS = int(os.getenv("TAVILY_MAX_RESULTS", "4"))
 
 # ==========================================================
@@ -32,7 +36,7 @@ TAVILY_MAX_RESULTS = int(os.getenv("TAVILY_MAX_RESULTS", "4"))
 # ==========================================================
 # The single LLM used for every feature.
 # Backward-compatible: also reads the old NEMOTRON_MODEL name.
-LLM_MODEL = os.getenv("LLM_MODEL") or os.getenv("NEMOTRON_MODEL") or "nvidia/nemotron-3-super-120b-a12b:free"
+LLM_MODEL = (os.getenv("LLM_MODEL") or os.getenv("NEMOTRON_MODEL") or "nvidia/nemotron-3-super-120b-a12b:free").strip()
 
 # ==========================================================
 # ChromaDB
